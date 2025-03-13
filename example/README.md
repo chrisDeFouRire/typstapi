@@ -13,6 +13,7 @@ This directory contains example files to demonstrate how to use the Typst API.
 Once you have the API running, you can test it with:
 
 ```bash
+# This will produce a regular PDF file without compression
 curl -X POST http://localhost:8080/typst/main.typ \
   -F "main.typ=@main.typ" \
   -F "splash192.png=@splash192.png" \
@@ -21,6 +22,7 @@ curl -X POST http://localhost:8080/typst/main.typ \
 ```
 
 This will:
+
 1. Upload the Typst document (`main.typ`)
 2. Upload the logo image (`splash192.png`)
 3. Submit the JSON data from `sample-data.json`
@@ -29,6 +31,7 @@ This will:
 ## Understanding the Example
 
 The `main.typ` file demonstrates:
+
 - Importing and using the JSON data from the API request
 - Including an image file
 - Creating a formatted document with headings, tables, and lists

@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 func main() {
@@ -120,16 +121,26 @@ func handleTypst(w http.ResponseWriter, r *http.Request) {
 
 	// Set response headers
 	w.Header().Set("Content-Type", "application/pdf")
-	w.Header().Set("Content-Encoding", "gzip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filepath.Base(pdfPath)))
 
-	// Create gzip writer
-	gz := gzip.NewWriter(w)
-	defer gz.Close()
+	// Check if client accepts gzip encoding
+	acceptEncoding := r.Header.Get("Accept-Encoding")
+	supportsGzip := strings.Contains(acceptEncoding, "gzip")
 
-	// Write the PDF data
-	if _, err := gz.Write(pdfData); err != nil {
-		http.Error(w, "Failed to write response", http.StatusInternalServerError)
-		return
+	// Use gzip compression only if client supports it
+	if supportsGzip {
+		w.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+		if _, err := gz.Write(pdfData); err != nil {
+			http.Error(w, "Failed to write response", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		// Send uncompressed data
+		if _, err := w.Write(pdfData); err != nil {
+			http.Error(w, "Failed to write response", http.StatusInternalServerError)
+			return
+		}
 	}
 }
