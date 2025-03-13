@@ -88,6 +88,11 @@ The API returns appropriate HTTP status codes:
 - 405: Method Not Allowed (non-POST requests)
 - 500: Internal Server Error (processing failures)
 
+When a Typst compilation error occurs, the API returns:
+- The HTTP 500 status code
+- An error message that includes the original error
+- The complete stderr output from the Typst CLI to help with debugging
+
 ## Security Notes
 
 - The API creates temporary directories for processing files

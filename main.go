@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
@@ -93,11 +94,19 @@ func handleTypst(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Run typst command
+	// Run typst command with stderr capture
 	cmd := exec.Command("typst", "compile", filename)
 	cmd.Dir = tempDir
+
+	// Capture stderr
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
 	if err := cmd.Run(); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to compile typst document: %v", err), http.StatusInternalServerError)
+		// Include the stderr output in the error message
+		errMsg := fmt.Sprintf("Failed to compile typst document: %v\n\nTypst Error Output:\n%s",
+			err, stderr.String())
+		http.Error(w, errMsg, http.StatusInternalServerError)
 		return
 	}
 
