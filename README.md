@@ -61,12 +61,14 @@ docker run -e PORT=3000 -p 3000:3000 typstapi
 
 ### A pre-built Docker image is available on Docker Hub
  
+See the Docker Hub page [sslboard/typstapi](https://hub.docker.com/r/sslboard/typstapi) for more details.
+
 ```bash
 # Pull the image
-docker pull sslboard/typstapi
+docker pull sslboard/typstapi:v1.0.0
 
 # Run the container
-docker run -p 8080:8080 sslboard/typstapi
+docker run -p 8080:8080 sslboard/typstapi:v1.0.0
 ```
 
 ## API Usage
