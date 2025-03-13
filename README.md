@@ -59,6 +59,16 @@ docker run -p 8080:8080 typstapi
 docker run -e PORT=3000 -p 3000:3000 typstapi
 ```
 
+### A pre-built Docker image is available on Docker Hub
+ 
+```bash
+# Pull the image
+docker pull sslboard/typstapi
+
+# Run the container
+docker run -p 8080:8080 sslboard/typstapi
+```
+
 ## API Usage
 
 ### POST /typst/:filename
@@ -120,3 +130,7 @@ When a Typst compilation error occurs, the API returns:
 - The API creates temporary directories for processing files
 - All temporary files are automatically cleaned up after processing
 - File size is limited to 32MB per request
+
+## Author
+
+Created by Chris Hartwig for [SSLBoard.com](https://sslboard.com).
