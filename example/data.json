@@ -1,0 +1,16 @@
+{
+  "title": "Sample Document",
+  "author": "Typst API User",
+  "date": "2023-06-15",
+  "company": "Example Corp",
+  "items": [
+    "First dynamic item",
+    "Second dynamic item",
+    "Third dynamic item with special characters: ©®™"
+  ],
+  "numbers": [1, 2, 3, 4, 5],
+  "nested": {
+    "key1": "value1",
+    "key2": "value2"
+  }
+} 
