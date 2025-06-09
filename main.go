@@ -47,135 +47,114 @@ func handleTypst(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract the filename from the URL path
 	filename := filepath.Base(r.URL.Path)
 	if filename == "" || filename == "typst" {
 		http.Error(w, "Invalid filename", http.StatusBadRequest)
 		return
 	}
 
-	// Create a temporary directory
 	tempDir, err := os.MkdirTemp("", "typst-*")
 	if err != nil {
 		http.Error(w, "Failed to create temporary directory", http.StatusInternalServerError)
 		return
 	}
-	defer os.RemoveAll(tempDir) // Clean up when done
+	defer os.RemoveAll(tempDir)
 
-	// Parse the multipart form
-	err = r.ParseMultipartForm(32 << 20) // 32MB max memory
+	if err := saveFormFiles(r, tempDir); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	typstPDFPath, err := compileTypst(tempDir, filename)
 	if err != nil {
-		http.Error(w, "Failed to parse form", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Save uploaded files
-	for _, fileHeaders := range r.MultipartForm.File {
-		for _, fileHeader := range fileHeaders {
-			file, err := fileHeader.Open()
-			if err != nil {
-				http.Error(w, "Failed to open uploaded file", http.StatusInternalServerError)
-				return
-			}
-			defer file.Close()
-
-			// Create the file in the temp directory
-			dst, err := os.Create(filepath.Join(tempDir, fileHeader.Filename))
-			if err != nil {
-				http.Error(w, "Failed to create file", http.StatusInternalServerError)
-				return
-			}
-			defer dst.Close()
-
-			if _, err = io.Copy(dst, file); err != nil {
-				http.Error(w, "Failed to save file", http.StatusInternalServerError)
-				return
-			}
-		}
-	}
-
-	// Get JSON data and save to data.json
-	jsonData := r.FormValue("data")
-	if jsonData != "" {
-		// Verify it's valid JSON
-		var jsonMap map[string]interface{}
-		if err := json.Unmarshal([]byte(jsonData), &jsonMap); err != nil {
-			http.Error(w, "Invalid JSON data", http.StatusBadRequest)
-			return
-		}
-
-		// Write to data.json
-		if err := os.WriteFile(filepath.Join(tempDir, "data.json"), []byte(jsonData), 0644); err != nil {
-			http.Error(w, "Failed to save JSON data", http.StatusInternalServerError)
-			return
-		}
-	}
-
-	// Run typst command with stderr capture
-	cmd := exec.Command("typst", "compile", filename)
-	cmd.Dir = tempDir
-
-	// Capture stderr
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		// Include the stderr output in the error message
-		errMsg := fmt.Sprintf("Failed to compile typst document: %v\n\nTypst Error Output:\n%s",
-			err, stderr.String())
-		http.Error(w, errMsg, http.StatusInternalServerError)
-		return
-	}
-
-	// Get the path of the generated PDF
-	typstPDFPath := filepath.Join(tempDir, filepath.Base(filename[:len(filename)-4]+".pdf"))
-
-	// Get pre and post PDF files
-	prePDFs := getPDFFiles(r.MultipartForm, "pre_")
-	postPDFs := getPDFFiles(r.MultipartForm, "post_")
-
-	// If there are no pre/post PDFs, just return the Typst-generated PDF
-	if len(prePDFs) == 0 && len(postPDFs) == 0 {
-		pdfData, err := os.ReadFile(typstPDFPath)
-		if err != nil {
-			http.Error(w, "Failed to read generated PDF", http.StatusInternalServerError)
-			return
-		}
-		sendPDFResponse(w, r, pdfData)
-		return
-	}
-
-	// Prepare the list of PDFs to merge
-	var pdfsToMerge []string
-
-	// Add pre PDFs in order
-	for _, filename := range prePDFs {
-		pdfsToMerge = append(pdfsToMerge, filepath.Join(tempDir, filename))
-	}
-
-	// Add the Typst-generated PDF
-	pdfsToMerge = append(pdfsToMerge, typstPDFPath)
-
-	// Add post PDFs in order
-	for _, filename := range postPDFs {
-		pdfsToMerge = append(pdfsToMerge, filepath.Join(tempDir, filename))
-	}
-
-	// Create the merged PDF
-	mergedPDFPath := filepath.Join(tempDir, "merged.pdf")
-	if err := api.MergeAppendFile(pdfsToMerge, mergedPDFPath, false, nil); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to merge PDFs: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	// Read the merged PDF
-	pdfData, err := os.ReadFile(mergedPDFPath)
+	pdfData, err := mergePDFs(tempDir, typstPDFPath, r.MultipartForm)
 	if err != nil {
-		http.Error(w, "Failed to read merged PDF", http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	sendPDFResponse(w, r, pdfData)
+}
+
+func saveFormFiles(r *http.Request, tempDir string) error {
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		return fmt.Errorf("Failed to parse form: %w", err)
+	}
+
+	for _, fileHeaders := range r.MultipartForm.File {
+		for _, fileHeader := range fileHeaders {
+			file, err := fileHeader.Open()
+			if err != nil {
+				return fmt.Errorf("Failed to open uploaded file: %w", err)
+			}
+			defer file.Close()
+
+			dst, err := os.Create(filepath.Join(tempDir, fileHeader.Filename))
+			if err != nil {
+				return fmt.Errorf("Failed to create file: %w", err)
+			}
+			defer dst.Close()
+
+			if _, err = io.Copy(dst, file); err != nil {
+				return fmt.Errorf("Failed to save file: %w", err)
+			}
+		}
+	}
+
+	jsonData := r.FormValue("data")
+	if jsonData != "" {
+		var jsonMap map[string]interface{}
+		if err := json.Unmarshal([]byte(jsonData), &jsonMap); err != nil {
+			return fmt.Errorf("Invalid JSON data: %w", err)
+		}
+
+		if err := os.WriteFile(filepath.Join(tempDir, "data.json"), []byte(jsonData), 0644); err != nil {
+			return fmt.Errorf("Failed to save JSON data: %w", err)
+		}
+	}
+	return nil
+}
+
+func compileTypst(dir, filename string) (string, error) {
+	cmd := exec.Command("typst", "compile", filename)
+	cmd.Dir = dir
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("Failed to compile typst document: %v\n\nTypst Error Output:\n%s", err, stderr.String())
+	}
+
+	return filepath.Join(dir, filepath.Base(filename[:len(filename)-4]+".pdf")), nil
+}
+
+func mergePDFs(dir, typstPDFPath string, form *multipart.Form) ([]byte, error) {
+	prePDFs := getPDFFiles(form, "pre_")
+	postPDFs := getPDFFiles(form, "post_")
+
+	if len(prePDFs) == 0 && len(postPDFs) == 0 {
+		return os.ReadFile(typstPDFPath)
+	}
+
+	var pdfsToMerge []string
+	for _, name := range prePDFs {
+		pdfsToMerge = append(pdfsToMerge, filepath.Join(dir, name))
+	}
+	pdfsToMerge = append(pdfsToMerge, typstPDFPath)
+	for _, name := range postPDFs {
+		pdfsToMerge = append(pdfsToMerge, filepath.Join(dir, name))
+	}
+
+	mergedPDFPath := filepath.Join(dir, "merged.pdf")
+	if err := api.MergeAppendFile(pdfsToMerge, mergedPDFPath, false, nil); err != nil {
+		return nil, fmt.Errorf("Failed to merge PDFs: %w", err)
+	}
+
+	return os.ReadFile(mergedPDFPath)
 }
 
 func sendPDFResponse(w http.ResponseWriter, r *http.Request, pdfData []byte) {
