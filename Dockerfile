@@ -5,7 +5,7 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
-COPY *.go .
+COPY main.go ./
 
 # Build the application
 RUN go build -o typstapi
