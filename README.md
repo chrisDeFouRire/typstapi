@@ -15,7 +15,7 @@ Check out the `example` directory for a complete working example of how to use t
 
 For local development:
 
-- Go 1.16 or later
+- Go 1.23 or later
 - Typst CLI installed and available in your PATH
 
 For Docker deployment:
