@@ -1,6 +1,6 @@
 # Typst API
 
-A simple web API that processes Typst documents and returns PDFs. The API accepts file uploads and JSON data, processes them using the Typst CLI, and returns a PDF (with optional gzip compression).
+A simple web API that processes Typst documents and returns PDFs. The API accepts file uploads and JSON data, processes them using the Typst CLI, and returns a PDF (with optional gzip compression). It also supports merging additional PDFs before and after the Typst-generated PDF.
 
 ## Example
 
@@ -75,7 +75,7 @@ docker run -p 8080:8080 sslboard/typstapi:v1.0.0
 
 ### POST /typst/:filename
 
-Process a Typst document and return the compiled PDF.
+Process a Typst document and return the compiled PDF. Optionally merge additional PDFs before and after the Typst-generated PDF.
 
 **Request:**
 
@@ -87,6 +87,8 @@ Process a Typst document and return the compiled PDF.
 
 - Files: Upload your Typst files and any assets (images, etc.)
 - `data`: (Optional) JSON string that will be saved as `data.json` in the processing directory
+- Pre-PDFs: (Optional) Files with names starting with `pre_` and ending with `.pdf` will be merged before the Typst output
+- Post-PDFs: (Optional) Files with names starting with `post_` and ending with `.pdf` will be merged after the Typst output
 
 **Response:**
 
@@ -104,6 +106,16 @@ curl -X POST http://localhost:8080/typst/main.typ \
   -F 'data={"hello": "world"}' \
   --output output.pdf
 
+# Request with pre and post PDFs
+curl -X POST http://localhost:8080/typst/main.typ \
+  -F "main.typ=@/path/to/main.typ" \
+  -F "logo.jpeg=@/path/to/logo.jpeg" \
+  -F 'data={"hello": "world"}' \
+  -F "pre_1.pdf=@/path/to/cover.pdf" \
+  -F "pre_2.pdf=@/path/to/toc.pdf" \
+  -F "post_1.pdf=@/path/to/appendix.pdf" \
+  --output output.pdf
+
 # Explicitly request no compression by not sending Accept-Encoding header
 curl -X POST http://localhost:8080/typst/main.typ \
   -H "Accept-Encoding: identity" \
@@ -112,6 +124,26 @@ curl -X POST http://localhost:8080/typst/main.typ \
   -F 'data={"hello": "world"}' \
   --output output.pdf
 ```
+
+## PDF Merging
+
+The API supports merging additional PDFs before and after the Typst-generated PDF:
+
+1. Pre-PDFs:
+   - Upload files with names starting with `pre_` and ending with `.pdf`
+   - Files are merged in alphabetical order
+   - Example: `pre_1.pdf`, `pre_2.pdf`, etc.
+
+2. Post-PDFs:
+   - Upload files with names starting with `post_` and ending with `.pdf`
+   - Files are merged in alphabetical order
+   - Example: `post_1.pdf`, `post_2.pdf`, etc.
+
+The final PDF will be assembled in this order:
+
+1. All pre-PDFs in alphabetical order
+2. The Typst-generated PDF
+3. All post-PDFs in alphabetical order
 
 ## Error Handling
 

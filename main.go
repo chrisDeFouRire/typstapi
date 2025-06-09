@@ -7,11 +7,15 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
+
+	"github.com/pdfcpu/pdfcpu/pkg/api"
 )
 
 func main() {
@@ -23,6 +27,18 @@ func main() {
 	http.HandleFunc("/typst/", handleTypst)
 	log.Printf("Server starting on port %s", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
+}
+
+// getPDFFiles returns a sorted list of PDF files from the multipart form that match the prefix
+func getPDFFiles(form *multipart.Form, prefix string) []string {
+	var files []string
+	for filename := range form.File {
+		if strings.HasPrefix(filename, prefix) && strings.HasSuffix(strings.ToLower(filename), ".pdf") {
+			files = append(files, filename)
+		}
+	}
+	sort.Strings(files)
+	return files
 }
 
 func handleTypst(w http.ResponseWriter, r *http.Request) {
@@ -111,17 +127,61 @@ func handleTypst(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read the generated PDF
-	pdfPath := filepath.Join(tempDir, filepath.Base(filename[:len(filename)-4]+".pdf"))
-	pdfData, err := os.ReadFile(pdfPath)
-	if err != nil {
-		http.Error(w, "Failed to read generated PDF", http.StatusInternalServerError)
+	// Get the path of the generated PDF
+	typstPDFPath := filepath.Join(tempDir, filepath.Base(filename[:len(filename)-4]+".pdf"))
+
+	// Get pre and post PDF files
+	prePDFs := getPDFFiles(r.MultipartForm, "pre_")
+	postPDFs := getPDFFiles(r.MultipartForm, "post_")
+
+	// If there are no pre/post PDFs, just return the Typst-generated PDF
+	if len(prePDFs) == 0 && len(postPDFs) == 0 {
+		pdfData, err := os.ReadFile(typstPDFPath)
+		if err != nil {
+			http.Error(w, "Failed to read generated PDF", http.StatusInternalServerError)
+			return
+		}
+		sendPDFResponse(w, r, pdfData)
 		return
 	}
 
+	// Prepare the list of PDFs to merge
+	var pdfsToMerge []string
+
+	// Add pre PDFs in order
+	for _, filename := range prePDFs {
+		pdfsToMerge = append(pdfsToMerge, filepath.Join(tempDir, filename))
+	}
+
+	// Add the Typst-generated PDF
+	pdfsToMerge = append(pdfsToMerge, typstPDFPath)
+
+	// Add post PDFs in order
+	for _, filename := range postPDFs {
+		pdfsToMerge = append(pdfsToMerge, filepath.Join(tempDir, filename))
+	}
+
+	// Create the merged PDF
+	mergedPDFPath := filepath.Join(tempDir, "merged.pdf")
+	if err := api.MergeAppendFile(pdfsToMerge, mergedPDFPath, false, nil); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to merge PDFs: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Read the merged PDF
+	pdfData, err := os.ReadFile(mergedPDFPath)
+	if err != nil {
+		http.Error(w, "Failed to read merged PDF", http.StatusInternalServerError)
+		return
+	}
+
+	sendPDFResponse(w, r, pdfData)
+}
+
+func sendPDFResponse(w http.ResponseWriter, r *http.Request, pdfData []byte) {
 	// Set response headers
 	w.Header().Set("Content-Type", "application/pdf")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filepath.Base(pdfPath)))
+	w.Header().Set("Content-Disposition", "attachment; filename=output.pdf")
 
 	// Check if client accepts gzip encoding
 	acceptEncoding := r.Header.Get("Accept-Encoding")

@@ -2,7 +2,9 @@
 FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
-COPY go.mod .
+COPY go.mod go.sum ./
+RUN go mod download
+
 COPY *.go .
 
 # Build the application
@@ -11,7 +13,7 @@ RUN go build -o typstapi
 # Final stage
 FROM alpine:3.19
 
-# Install Typst CLI
+# Install Typst CLI and pdfcpu
 RUN apk add --no-cache curl \
     && curl -L https://github.com/typst/typst/releases/latest/download/typst-x86_64-unknown-linux-musl.tar.xz -o typst.tar.xz \
     && tar xf typst.tar.xz \
