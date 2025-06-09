@@ -82,25 +82,25 @@ func handleTypst(w http.ResponseWriter, r *http.Request) {
 
 func saveFormFiles(r *http.Request, tempDir string) error {
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		return fmt.Errorf("Failed to parse form: %w", err)
+		return fmt.Errorf("failed to parse form: %w", err)
 	}
 
 	for _, fileHeaders := range r.MultipartForm.File {
 		for _, fileHeader := range fileHeaders {
 			file, err := fileHeader.Open()
 			if err != nil {
-				return fmt.Errorf("Failed to open uploaded file: %w", err)
+				return fmt.Errorf("failed to open uploaded file: %w", err)
 			}
 			defer file.Close()
 
 			dst, err := os.Create(filepath.Join(tempDir, fileHeader.Filename))
 			if err != nil {
-				return fmt.Errorf("Failed to create file: %w", err)
+				return fmt.Errorf("failed to create file: %w", err)
 			}
 			defer dst.Close()
 
 			if _, err = io.Copy(dst, file); err != nil {
-				return fmt.Errorf("Failed to save file: %w", err)
+				return fmt.Errorf("failed to save file: %w", err)
 			}
 		}
 	}
@@ -109,11 +109,11 @@ func saveFormFiles(r *http.Request, tempDir string) error {
 	if jsonData != "" {
 		var jsonMap map[string]interface{}
 		if err := json.Unmarshal([]byte(jsonData), &jsonMap); err != nil {
-			return fmt.Errorf("Invalid JSON data: %w", err)
+			return fmt.Errorf("invalid JSON data: %w", err)
 		}
 
 		if err := os.WriteFile(filepath.Join(tempDir, "data.json"), []byte(jsonData), 0644); err != nil {
-			return fmt.Errorf("Failed to save JSON data: %w", err)
+			return fmt.Errorf("failed to save JSON data: %w", err)
 		}
 	}
 	return nil
@@ -126,7 +126,7 @@ func compileTypst(dir, filename string) (string, error) {
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("Failed to compile typst document: %v\n\nTypst Error Output:\n%s", err, stderr.String())
+		return "", fmt.Errorf("failed to compile typst document: %v\n\nTypst Error Output:\n%s", err, stderr.String())
 	}
 
 	return filepath.Join(dir, filepath.Base(filename[:len(filename)-4]+".pdf")), nil
@@ -151,7 +151,7 @@ func mergePDFs(dir, typstPDFPath string, form *multipart.Form) ([]byte, error) {
 
 	mergedPDFPath := filepath.Join(dir, "merged.pdf")
 	if err := api.MergeAppendFile(pdfsToMerge, mergedPDFPath, false, nil); err != nil {
-		return nil, fmt.Errorf("Failed to merge PDFs: %w", err)
+		return nil, fmt.Errorf("failed to merge PDFs: %w", err)
 	}
 
 	return os.ReadFile(mergedPDFPath)
